@@ -17,4 +17,7 @@ class ImageNetV2DatasetWithPaths(ImageNetV2Dataset):
 
 class ImageNetV2(ImageNet):
     def get_test_dataset(self):
+        self.location = "/scratch/mp5847/wise-ft-data"
+        dataset = ImageNetV2DatasetWithPaths(transform=self.preprocess, location=self.location)
+
         return ImageNetV2DatasetWithPaths(transform=self.preprocess, location=self.location)

@@ -10,7 +10,7 @@ class ImageNet:
                  preprocess,
                  location=os.path.expanduser('~/data'),
                  batch_size=32,
-                 num_workers=32,
+                 num_workers=16,
                  classnames='openai'):
         self.preprocess = preprocess
         self.location = location
@@ -23,9 +23,10 @@ class ImageNet:
     
     def populate_train(self):
         traindir = os.path.join(self.location, self.name(), 'train')
+
         self.train_dataset = ImageFolderWithPaths(
             traindir,
-            transform=self.preprocess)
+            transform=self.preprocess, teacher_logits=None)
         sampler = self.get_train_sampler()
         kwargs = {'shuffle' : True} if sampler is None else {}
         self.train_loader = torch.utils.data.DataLoader(

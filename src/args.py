@@ -67,6 +67,10 @@ def parse_arguments():
         default=None,
         help="The type of model (e.g. RN50, ViT-B/32).",
     )
+    parser.add_argument("--pretrained", 
+        required=False, 
+        type=str, 
+        help="Pretrained dataset for open clip")
     parser.add_argument(
         "--batch-size",
         type=int,
@@ -136,6 +140,29 @@ def parse_arguments():
         default=1e-8,
         help="TODO",
     )
+
+    #add zeroshot_checkpoint and finetuned_checkpoint
+    parser.add_argument(
+        "--zeroshot_checkpoint",
+        type=str,
+        default=None,
+        help="Path to the zero shot checkpoint"
+    )
+
+    parser.add_argument(
+        "--finetuned_checkpoint",
+        type=str,
+        default=None,
+        help="Path to the finetuned checkpoint"
+    )
+
+    parser.add_argument(
+        "--checkpoint",
+        type=str,
+        default=None,
+        help="Path to the checkpoint"
+    )
+
     parsed_args = parser.parse_args()
     parsed_args.device = "cuda" if torch.cuda.is_available() else "cpu"
     

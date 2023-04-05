@@ -24,7 +24,7 @@ class SubsetSampler(Sampler):
         return len(self.indices)
 
 class ImageFolderWithPaths(datasets.ImageFolder):
-    def __init__(self, path, transform, flip_label_prob=0.0):
+    def __init__(self, path, transform, flip_label_prob=0.0, teacher_logits=None):
         super().__init__(path, transform)
         self.flip_label_prob = flip_label_prob
         if self.flip_label_prob > 0:
@@ -38,13 +38,39 @@ class ImageFolderWithPaths(datasets.ImageFolder):
                         new_label
                     )
 
+    def set_teacher_logits(self, teacher_logits_path):
+        #copy teacher logits where teacher logits is np array
+        self.teacher_logits = np.load(teacher_logits_path).copy()
+        print("Teacher logits loaded", self.teacher_logits.shape)
+        
     def __getitem__(self, index):
         image, label = super(ImageFolderWithPaths, self).__getitem__(index)
-        return {
+        # assert self.teacher_logits is not None
+        try:
+            if(self.teacher_logits is not None):
+                teacher_logits = self.teacher_logits[index]
+            else:
+                #dummy
+                teacher_logits = np.zeros(1)
+        except Exception as e:
+            # print("Error", e)
+            return {
             'images': image,
             'labels': label,
             'image_paths': self.samples[index][0]
+            }
+       
+        return {
+            'images': image,
+            'labels': label,
+            'image_paths': self.samples[index][0],
+            'teacher_logits': teacher_logits
         }
+        # return {
+        #     'images': image,
+        #     'labels': label,
+        #     'image_paths': self.samples[index][0]
+        # }
 
 
 def maybe_dictionarize(batch):

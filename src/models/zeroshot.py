@@ -14,6 +14,7 @@ from src.args import parse_arguments
 from src.models.modeling import ClassificationHead, ImageEncoder, ImageClassifier
 from src.models.eval import evaluate
 
+import open_clip
 
 def get_zeroshot_classifier(args, clip_model):
     assert args.template is not None
@@ -38,7 +39,8 @@ def get_zeroshot_classifier(args, clip_model):
             texts = []
             for t in template:
                 texts.append(t(classname))
-            texts = clip.tokenize(texts).to(device) # tokenize
+            # texts = clip.tokenize(texts).to(device) # tokenize
+            texts = open_clip.get_tokenizer(args.model)(texts).to(device)
             embeddings = clip_model.encode_text(texts) # embed with text encoder
             embeddings /= embeddings.norm(dim=-1, keepdim=True)
 
