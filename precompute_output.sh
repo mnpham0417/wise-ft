@@ -4,10 +4,10 @@ torchrun src/precompute_output.py  --num_epoch 400 \
                                     --learning_rate 0.01 \
                                     --cuda \
                                     --workers 20 \
-                                    --model ViT-g-14 \
-                                    --pretrained laion2b_s12b_b42k \
-                                    --teacher-ckpt "/scratch/mp5847/wise-ft-ckpt/ViT-g-14-pretrained=laion2b_s12b_b42k/wise_ft_alpha=0.000.pt" \
-                                    --batch_size 256 \
+                                    --model RN50 \
+                                    --pretrained "" \
+                                    --teacher-ckpt "/scratch/mp5847/wise-ft-kd/rn50_scratch_1/model_99.pt" \
+                                    --batch_size 512 \
                                     --dist-url "env://" \
                                     --dist-backend "nccl" \
                                     --multiprocessing-distributed \

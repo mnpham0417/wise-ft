@@ -12,6 +12,7 @@ from src.models.zeroshot import get_zeroshot_classifier
 from src.args import parse_arguments
 import open_clip
 import torch.nn as nn
+from collections import OrderedDict
 
 if __name__ == '__main__':
     args = parse_arguments()
@@ -37,23 +38,9 @@ if __name__ == '__main__':
         classification_head_student = nn.Linear(768, 1000)
     model_student =  ImageClassifier(image_encoder_student, classification_head_student, process_images=True)
 
-    #print parameters of student model
-    # print("Student model parameters:")
-    # for name, param in model_student.named_parameters():
-    #     print(name)
-
     state_dict = torch.load(args.checkpoint)
-    # print("state_dict keys:")
-    # for k, v in state_dict.items():
-    #     print(k)
-
-    # assert 0
 
     
-
-    # print("=======================")
-
-    from collections import OrderedDict
     new_state_dict = OrderedDict()
 
     for k, v in state_dict.items():

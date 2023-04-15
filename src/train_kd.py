@@ -3,7 +3,6 @@ import torch.optim as optim
 from torch.utils.data import DataLoader
 from models import *
 from itertools import cycle
-import torchvision
 import copy
 import open_clip
 import clip
@@ -17,7 +16,6 @@ import shutil
 import time
 import warnings
 from enum import Enum
-
 import torch.nn as nn
 import torch.nn.parallel
 import torch.backends.cudnn as cudnn
@@ -32,18 +30,13 @@ import torchvision.datasets as datasets
 import torchvision.models as models
 from torch.utils.data import Subset
 from torch.distributed.elastic.multiprocessing.errors import record
-
 import numpy as np
-
-import torch
-
 from src.models.eval import evaluate
 from src.models.finetune import finetune
 from src.models.modeling import ClassificationHead, ImageEncoder, ImageClassifier
 from src.models.utils import fisher_load
 from src.models.zeroshot import get_zeroshot_classifier
 from src.args import parse_arguments
-
 from src.datasets.imagenet import ImageNet
 from src.datasets.common import get_dataloader, maybe_dictionarize
 import torch.nn.functional as F
@@ -63,11 +56,9 @@ def build_parser():
     parser.add_argument("--model", type=str, default="RN50")  
     parser.add_argument("--pretrained", type=str, default="")  
 
-    #teacher model
-    parser.add_argument("--teacher-ckpt", type=str, default="")
+    
 
     #kd hyperparameters
-    parser.add_argument("--alpha", type=float, default=0.5)
     parser.add_argument("--T", type=float, default=4.0)
 
     #distributed training
@@ -146,14 +137,67 @@ def build_parser():
         help="Which class names to use.",
     )
 
-    #teacher logits
+    #teacher 
     parser.add_argument(
         "--teacher-logits-path",
         type=str,
         default=None,
         help="Path to teacher logits",
     )
+
+    parser.add_argument(
+        "--teacher-index-path",
+        type=str,
+        default=None,
+        help="Path to teacher logits index",
+    )
+
+    #pretrained ckpt for resume
+    parser.add_argument(
+        "--resume",
+        action="store_true",
+        help="Whether to resume from a checkpoint",
+    )
+
+    parser.add_argument(
+        "--pretrained-ckpt",
+        type=str,
+        default=None,
+        help="Path to pretrained ckpt",
+    )
+
+    parser.add_argument(
+        "--optimizer-ckpt",
+        type=str,
+        default=None,
+        help="Path to optimizer ckpt",
+    )
+
+    parser.add_argument(
+        "--scheduler-ckpt",
+        type=str,
+        default=None,
+        help="Path to scheduler ckpt",
+    )
+
+    #loss type
+    parser.add_argument(
+        "--loss-type",
+        type=str,
+        default="ce_softlabels",
+        help="type of loss",
+    )
     return parser
+
+class ImageNetDatasetOverrideLen(datasets.ImageFolder):
+    def __init__(self, dataset, index_path):
+        self.dataset = dataset
+        self.index_list = np.load(index_path)
+    def __getitem__(self, index):
+        selected_index = self.index_list[index]
+        return self.dataset[selected_index]
+    def __len__(self):
+        return len(self.index_list)
 
 def test(model, test_dataloader):
     #test
@@ -236,7 +280,6 @@ def main_worker(gpu, ngpus_per_node, args):
     image_encoder_student.model = image_encoder_student_model
     image_encoder_student.train_preprocess = image_encoder_student_train_preprocess
     image_encoder_student.val_preprocess = image_encoder_student_val_preprocess
-    # classification_head_student = get_zeroshot_classifier(args, image_encoder_student_model)
 
     if(args.model == "ViT-B-32"):
         classification_head_student = nn.Linear(512, 1000)
@@ -250,11 +293,6 @@ def main_worker(gpu, ngpus_per_node, args):
         classification_head_student = nn.Linear(768, 1000)
     model_student =  ImageClassifier(image_encoder_student, classification_head_student, process_images=True)
 
-    # create teacher model
-    # model_teacher = ImageClassifier.load(args.teacher_ckpt)
-    # model_teacher.eval()
-    model_teacher = None
-
     if not torch.cuda.is_available():
         print('using CPU, this will be slow')
     elif args.distributed:
@@ -264,7 +302,6 @@ def main_worker(gpu, ngpus_per_node, args):
         if args.gpu is not None:
             torch.cuda.set_device(args.gpu)
             model_student.cuda(args.gpu)
-            # model_teacher.cuda(args.gpu)
 
             # When using a single GPU per process and per
             # DistributedDataParallel, we need to divide the batch size
@@ -288,10 +325,6 @@ def main_worker(gpu, ngpus_per_node, args):
         else:
             model_student = torch.nn.DataParallel(model_student).cuda()
 
-    # define loss function (criterion), optimizer, and learning rate scheduler
-    criterion_kl = nn.KLDivLoss(reduction="batchmean").cuda(args.gpu)
-    criterion_ce = nn.CrossEntropyLoss().cuda(args.gpu)
-
     optimizer = torch.optim.SGD(model_student.parameters(), args.lr,
                                 momentum=args.momentum,
                                 weight_decay=args.weight_decay)
@@ -304,11 +337,13 @@ def main_worker(gpu, ngpus_per_node, args):
     # Data loading code
     imagenet_data = ImageNet(image_encoder_student_train_preprocess, args.data_location, args.batch_size)
     trainset = imagenet_data.train_dataset
-    trainset.set_teacher_logits(args.teacher_logits_path)
+    if args.loss_type in ["ce_softlabels", "kl_softlabels", "mse_softlabels"]:
+        trainset.set_teacher_logits(args.teacher_logits_path)
+        if(args.teacher_index_path is not None):
+            trainset = ImageNetDatasetOverrideLen(trainset, args.teacher_index_path)
 
     if args.distributed:
         train_sampler = torch.utils.data.distributed.DistributedSampler(trainset)
-        # val_sampler = torch.utils.data.distributed.DistributedSampler(testset_cifar10, shuffle=False, drop_last=True)
     else:
         train_sampler = None
         # val_sampler = None
@@ -325,13 +360,20 @@ def main_worker(gpu, ngpus_per_node, args):
     #     validate(val_loader, model, criterion, args)
     #     return
 
+    if(args.loss_type == "ce_softlabels"):
+        criterion = nn.CrossEntropyLoss().cuda(args.gpu)
+    elif(args.loss_type == "kl_softlabels"):
+        criterion = nn.KLDivLoss(reduction="batchmean").cuda(args.gpu)
+    elif(args.loss_type == "mse_softlabels"):
+        criterion = nn.MSELoss().cuda(args.gpu)
+
     for epoch in range(args.start_epoch, args.epochs):
         # val_acc = validate(val_loader, student, nn.CrossEntropyLoss().cuda(args.gpu), args)
 
         if args.distributed:
             train_sampler.set_epoch(epoch)
         # train for one epoch
-        train(train_loader, model_student, model_teacher, criterion_ce, criterion_kl, optimizer, epoch, args)
+        train(train_loader, model_student, optimizer, epoch, args)
 
         if not args.multiprocessing_distributed or (args.multiprocessing_distributed
                 and args.rank % ngpus_per_node == 0):
@@ -347,73 +389,76 @@ def main_worker(gpu, ngpus_per_node, args):
             torch.save(scheduler.state_dict(), f"/scratch/mp5847/wise-ft-kd/{args.name}/scheduler_{epoch}.pt")
         scheduler.step()
 
-        
-        
 def save_checkpoint(state, filename='checkpoint.pth.tar'):
     torch.save(state, filename)
 
 @record
-def train(train_loader, student, teacher, criterion_ce, criterion_kl, optimizer, epoch, args):
-    with torch.autograd.set_detect_anomaly(True):
-        batch_time = AverageMeter('Time', ':6.3f')
-        data_time = AverageMeter('Data', ':6.3f')
-        losses = AverageMeter('Loss', ':.4e')
-     
-        progress = ProgressMeter(
-            len(train_loader),
-            [batch_time, data_time, losses],
-            prefix="Epoch: [{}]".format(epoch))
-        # switch to train mode
-        student.train()
-        # teacher.eval()
-       
-        end = time.time()
-        for idx, data in enumerate(train_loader):
-            # measure data loading time
-            data_time.update(time.time() - end)
-            optimizer.zero_grad()
+def train(train_loader, criterion, student, teacher, optimizer, epoch, args):
+    batch_time = AverageMeter('Time', ':6.3f')
+    data_time = AverageMeter('Data', ':6.3f')
+    losses = AverageMeter('Loss', ':.4e')   
+    
+    progress = ProgressMeter(
+        len(train_loader),
+        [batch_time, data_time, losses],
+        prefix="Epoch: [{}]".format(epoch))
+    # switch to train mode
+    student.train()
+    
+    end = time.time()
+    for idx, data in enumerate(train_loader):
+        # measure data loading time
+        data_time.update(time.time() - end)
+        optimizer.zero_grad()
 
-            images = data['images']
-            target = data['labels']
-            teacher_out = data['teacher_logits']
-            
-            if args.gpu is not None:
-                images = images.cuda(args.gpu, non_blocking=True)
+        images = data['images']
+        target = data['labels']
+        
+        if args.gpu is not None:
+            images = images.cuda(args.gpu, non_blocking=True)
+            target = target.cuda(args.gpu, non_blocking=True)
+            if(args.loss_type in ["ce_softlabels", "kl_softlabels", "mse_softlabels"]):
+                teacher_out = data['teacher_logits']
                 teacher_out = teacher_out.cuda(args.gpu, non_blocking=True)
+        
+        # compute output
+        # with torch.no_grad():
+        #     teacher_out = teacher(images)
 
-            # compute output
-            # with torch.no_grad():
-            #     teacher_out = teacher(images)
+        # if args.gpu is not None:
+        #     teacher_out = teacher_out.cuda(args.gpu, non_blocking=True)
 
-            # if args.gpu is not None:
-            #     teacher_out = teacher_out.cuda(args.gpu, non_blocking=True)
-                
-            if torch.cuda.is_available():
-                target = target.cuda(args.gpu, non_blocking=True)
+        student_out = student(images)
 
-            student_out = student(images)
-
-            # loss_kl = criterion_kl(F.log_softmax(student_out/args.T, dim=1), F.softmax(teacher_out/args.T, dim=1))*args.T*args.T
-            # loss_ce = criterion_ce(student_out, target)
-            # loss = loss_kl*(1 - args.alpha) + loss_ce*args.alpha
-
-            #cross entropy loss with softmax
-            teacher_softmax = F.softmax(teacher_out, dim=1)
-            loss = criterion_ce(student_out, teacher_softmax)
-
-            losses.update(loss.item(), images.size(0))
-
-            # compute gradient and do SGD step
+        if args.loss_type == "ce_softlabels":
             
-            loss.backward()
-            optimizer.step()
+            teacher_softmax = F.softmax(teacher_out, dim=1)
+            loss = criterion(student_out, teacher_softmax)
 
-            # measure elapsed time
-            batch_time.update(time.time() - end)
-            end = time.time()
+        elif args.loss_type == "ce_hardlabels":
+            loss = criterion(student_out, target)
 
-            if idx % args.print_freq == 0:
-                progress.display(idx + 1)
+        elif args.loss_type == "kl_softlabels":
+            loss = criterion(F.log_softmax(student_out/args.T, dim=1), F.softmax(teacher_out/args.T, dim=1))*args.T*args.T
+
+        elif args.loss_type == "mse_softlabels":
+            student_out = F.softmax(student_out, dim=1)
+            teacher_out = F.softmax(teacher_out, dim=1)
+            loss = criterion(student_out, teacher_out)
+
+        losses.update(loss.item(), images.size(0))
+
+        # compute gradient and do SGD step
+        
+        loss.backward()
+        optimizer.step()
+
+        # measure elapsed time
+        batch_time.update(time.time() - end)
+        end = time.time()
+
+        if idx % args.print_freq == 0:
+            progress.display(idx + 1)
     
 class Summary(Enum):
     NONE = 0

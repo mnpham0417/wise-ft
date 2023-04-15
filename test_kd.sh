@@ -1,8 +1,10 @@
 cd /home/mp5847/src/wise-ft; export PYTHONPATH="$PYTHONPATH:$PWD"; \
 
 python src/test_kd.py   \
-    --eval-datasets=ImageNet,ImageNetV2  \
+    --eval-datasets=ImageNet,ImageNetV2,ImageNetR,ImageNetA,ImageNetSketch,ObjectNet  \
     --model RN50 \
     --pretrained "" \
-    --checkpoint "/scratch/mp5847/wise-ft-kd/teacher=ViT-B-32-pretrained=openai_student=RN50_alpha=0.0_T=1.0_correct_low_entropy=1-1-hard/model_99.pt"  \
-    --data-location "/" 
+    --checkpoint "/scratch/mp5847/wise-ft-kd/rn50_scratch_0/model_99.pt"  \
+    --data-location "/" \
+    --alpha 0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1.0 \
+    --save "./"

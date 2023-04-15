@@ -36,4 +36,5 @@ class ImageNetR(ImageNetSubsample):
         return CLASS_SUBLIST, CLASS_SUBLIST_MASK
 
     def get_test_path(self):
+        self.location = "/scratch/mp5847/wise-ft-data"
         return os.path.join(self.location, 'imagenet-r')
