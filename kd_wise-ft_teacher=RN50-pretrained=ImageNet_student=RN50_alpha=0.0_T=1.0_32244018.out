@@ -41906,3 +41906,5 @@ Traceback (most recent call last):
   File "/scratch/mp5847/conda_environments/conda_pkgs/wise_ft/lib/python3.10/runpy.py", line 252, in _get_code_from_file
     with io.open_code(decoded_path) as f:
 FileNotFoundError: [Errno 2] No such file or directory: '/home/mp5847/src/wise-ft/src/train_kd_ce_softlabels.py'
+slurmstepd: error: *** JOB 32244018 ON ga033 CANCELLED AT 2023-04-14T23:01:26 ***
+slurmstepd: error: *** JOB 32244018 STEPD TERMINATED ON ga033 AT 2023-04-14T23:02:27 DUE TO JOB NOT ENDING WITH SIGNALS ***
