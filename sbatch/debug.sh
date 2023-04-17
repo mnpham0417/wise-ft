@@ -1,13 +1,13 @@
 cd /home/mp5847/src/wise-ft; export PYTHONPATH="$PYTHONPATH:$PWD"; \
 
-torchrun src/train_kd_ce_softlabels.py --name "teacher=RN50-pretrained=ImageNet_student=RN50_alpha=0.0_T=1.0" \
+torchrun src/train_kd.py --name "teacher=coca_ViT-B-32-pretrained=laion2B-s13B-b90k_student=RN50_timm_alpha=0.0_T=1.0" \
                             --epochs 100 \
-                            --learning_rate 0.1 \
+                            --learning_rate 0.00001 \
                             --cuda \
                             --workers 5 \
-                            --model "RN50" \
-                            --pretrained "" \
-                            --batch_size 32 \
+                            --model "resnet50" \
+                            --pretrained \
+                            --batch_size 512 \
                             --dist-url "env://" \
                             --dist-backend "nccl" \
                             --multiprocessing-distributed \
@@ -17,6 +17,5 @@ torchrun src/train_kd_ce_softlabels.py --name "teacher=RN50-pretrained=ImageNet_
                             --data-location=/ \
                             --rank 0 \
                             --T 1.0 \
-                            --teacher-logits-path /scratch/mp5847/wise-ft-precompute/rn50_scratch_1-ImageNet-imagenet-logits.npy \
-                            --resume \
-                            --pretrained-ckpt "/scratch/mp5847/wise-ft-kd/rn50_scratch_0/model_99.pt"
+                            --teacher-logits-path /scratch/mp5847/wise-ft-precompute/coca_ViT-B-32-laion2B-s13B-b90k/coca_ViT-B-32-laion2B-s13B-b90k-imagenet-logits.npy \
+                            --loss-type "kl_softlabels"

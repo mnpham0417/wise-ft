@@ -40,6 +40,9 @@ from src.args import parse_arguments
 from src.datasets.imagenet import ImageNet
 from src.datasets.common import get_dataloader, maybe_dictionarize
 import torch.nn.functional as F
+import timm
+import torchvision.transforms as transforms
+
 
 
 def build_parser():
@@ -54,9 +57,7 @@ def build_parser():
 
     #student model
     parser.add_argument("--model", type=str, default="RN50")  
-    parser.add_argument("--pretrained", type=str, default="")  
-
-    
+    parser.add_argument("--pretrained", action='store_true')  
 
     #kd hyperparameters
     parser.add_argument("--T", type=float, default=4.0)
@@ -83,8 +84,7 @@ def build_parser():
                         dest='weight_decay')
     parser.add_argument('-p', '--print-freq', default=10, type=int,
                         metavar='N', help='print frequency (default: 10)')
-    parser.add_argument('--resume', default='', type=str, metavar='PATH',
-                        help='path to latest checkpoint (default: none)')
+
     parser.add_argument('-e', '--evaluate', dest='evaluate', action='store_true',
                         help='evaluate model on validation set')
 
@@ -274,24 +274,19 @@ def main_worker(gpu, ngpus_per_node, args):
     args.device = device
 
     # create student model
-    image_encoder_student_model, image_encoder_student_train_preprocess, image_encoder_student_val_preprocess = open_clip.create_model_and_transforms(
-            args.model, pretrained=args.pretrained, device=device, jit=False)
-    image_encoder_student = ImageEncoder(args, keep_lang=True)
-    image_encoder_student.model = image_encoder_student_model
-    image_encoder_student.train_preprocess = image_encoder_student_train_preprocess
-    image_encoder_student.val_preprocess = image_encoder_student_val_preprocess
+    #Load a pre-trained model
+    base_model = timm.create_model(args.model, pretrained=args.pretrained)
+    base_model.train()
 
-    if(args.model == "ViT-B-32"):
-        classification_head_student = nn.Linear(512, 1000)
-    elif(args.model == "RN50"):
-        classification_head_student = nn.Linear(1024, 1000)
-    elif(args.model == "RN101"):
-        classification_head_student = nn.Linear(512, 1000)
-    elif(args.model == "ViT-B-16"):
-        classification_head_student = nn.Linear(512, 1000)
-    elif(args.model == "ViT-L-14"):
-        classification_head_student = nn.Linear(768, 1000)
-    model_student =  ImageClassifier(image_encoder_student, classification_head_student, process_images=True)
+    model_student = ImageClassifier(None, base_model, process_images=False)
+    model_student.train()
+
+    transform = transforms.Compose([
+        transforms.Resize((224, 224)),
+        transforms.ToTensor(),
+        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+    ])
+    model_student.val_preprocess = transform
 
     if not torch.cuda.is_available():
         print('using CPU, this will be slow')
@@ -335,7 +330,7 @@ def main_worker(gpu, ngpus_per_node, args):
     cudnn.benchmark = True
 
     # Data loading code
-    imagenet_data = ImageNet(image_encoder_student_train_preprocess, args.data_location, args.batch_size)
+    imagenet_data = ImageNet(transform, args.data_location, args.batch_size)
     trainset = imagenet_data.train_dataset
     if args.loss_type in ["ce_softlabels", "kl_softlabels", "mse_softlabels"]:
         trainset.set_teacher_logits(args.teacher_logits_path)
@@ -373,7 +368,7 @@ def main_worker(gpu, ngpus_per_node, args):
         if args.distributed:
             train_sampler.set_epoch(epoch)
         # train for one epoch
-        train(train_loader, model_student, optimizer, epoch, args)
+        train(train_loader, criterion, model_student, optimizer, epoch, args)
 
         if not args.multiprocessing_distributed or (args.multiprocessing_distributed
                 and args.rank % ngpus_per_node == 0):
@@ -393,7 +388,7 @@ def save_checkpoint(state, filename='checkpoint.pth.tar'):
     torch.save(state, filename)
 
 @record
-def train(train_loader, criterion, student, teacher, optimizer, epoch, args):
+def train(train_loader, criterion, student, optimizer, epoch, args):
     batch_time = AverageMeter('Time', ':6.3f')
     data_time = AverageMeter('Data', ':6.3f')
     losses = AverageMeter('Loss', ':.4e')   
