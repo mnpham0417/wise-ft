@@ -4,7 +4,6 @@ python src/test_kd.py   \
     --eval-datasets=ImageNet,ImageNetV2,ImageNetR,ImageNetA,ImageNetSketch,ObjectNet  \
     --model RN50 \
     --pretrained "" \
-    --checkpoint "/scratch/mp5847/wise-ft-kd/rn50_scratch_0/model_99.pt"  \
+    --checkpoint "/scratch/mp5847/wise-ft-kd/teacher=coca_ViT-L-14-pretrained=laion2B-s13B-b90k_student=RN50_timm_alpha=0.0_T=1.0/model_33.pt"  \
     --data-location "/" \
-    --alpha 0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1.0 \
     --save "./"

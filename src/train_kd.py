@@ -187,6 +187,7 @@ def build_parser():
         default="ce_softlabels",
         help="type of loss",
     )
+    
     return parser
 
 class ImageNetDatasetOverrideLen(datasets.ImageFolder):

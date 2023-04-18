@@ -7,7 +7,7 @@
 #SBATCH --job-name=kd_wise-ft
 #SBATCH --mail-type=ALL
 #SBATCH --mail-user=mp5847@nyu.edu
-#SBATCH --output=kd_wise-ft_teacher=coca_ViT-L-14-pretrained=laion2B-s13B-b90k_student=RN50_timm_alpha=0.0_T=1.0_%j.out
+#SBATCH --output=kd_wise-ft_teacher=coca_ViT-B-32-pretrained=laion2B-s13B-b90k_student=RN50_timm_alpha=0.0_T=1.0_%j.out
 
 module purge
 
@@ -17,7 +17,7 @@ singularity exec --nv \
   --overlay /vast/work/public/ml-datasets/imagenet/imagenet-train.sqf:ro \
   /scratch/work/public/singularity/cuda11.2.2-cudnn8-devel-ubuntu20.04.sif \
   /bin/bash -c 'source /ext3/env.sh; conda activate /scratch/mp5847/conda_environments/conda_pkgs/wise_ft; cd /home/mp5847/src/wise-ft; export PYTHONPATH="$PYTHONPATH:$PWD"; \
-      torchrun src/train_kd.py --name "teacher=coca_ViT-L-14-pretrained=laion2B-s13B-b90k_student=RN50_timm_alpha=0.0_T=1.0" \
+      torchrun src/train_kd.py --name "teacher=coca_ViT-B-32-pretrained=laion2B-s13B-b90k_student=RN50_timm_alpha=0.0_T=1.0" \
                             --epochs 100 \
                             --learning_rate 0.001 \
                             --cuda \
@@ -33,5 +33,5 @@ singularity exec --nv \
                             --data-location=/ \
                             --rank 0 \
                             --T 4.0 \
-                            --teacher-logits-path /scratch/mp5847/wise-ft-precompute/coca_ViT-L-14-laion2B-s13B-b90k/coca_ViT-L-14-laion2B-s13B-b90k-imagenet-logits.npy \
+                            --teacher-logits-path /scratch/mp5847/wise-ft-precompute/coca_ViT-B-32-laion2B-s13B-b90k/coca_ViT-B-32-laion2B-s13B-b90k-imagenet-logits.npy \
                             --loss-type "kl_softlabels" '

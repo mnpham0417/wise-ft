@@ -67,7 +67,7 @@ if __name__ == '__main__':
     img_cls_pretrained.val_preprocess = transform
 
     #Load a fine-tuned model
-    model_finetuned_statedict = torch.load("/scratch/mp5847/wise-ft-kd/teacher=coca_ViT-L-14-pretrained=laion2B-s13B-b90k_student=RN50_timm_alpha=0.0_T=1.0/model_2.pt")
+    model_finetuned_statedict = torch.load("/scratch/mp5847/wise-ft-kd/teacher=coca_ViT-B-32-pretrained=laion2B-s13B-b90k_student=RN50_timm_alpha=0.0_T=1.0/model_1.pt")
     new_model_finetuned_statedict = OrderedDict()
     for k, v in model_finetuned_statedict.items():
         name = k[7:]
@@ -86,7 +86,7 @@ if __name__ == '__main__':
     # make sure checkpoints are compatible
     assert set(theta_0.keys()) == set(theta_1.keys())
 
-    alphas = [0.01, 0.02]
+    alphas = [1.0]
     for alpha in alphas:
         args.alpha = alpha
 

@@ -21,6 +21,7 @@ if __name__ == '__main__':
     model.eval()
 
     img_cls = ImageClassifier(None, model, process_images=False)
+    img_cls.load_state_dict(torch.load(args.checkpoint))
 
 
     transform = transforms.Compose([
